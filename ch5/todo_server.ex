@@ -43,6 +43,55 @@ defmodule TodoServer do
   end
 end
 
+# TodoServer where the pid is registered in the process.
+defmodule RegisteredTodoServer do
+  def start do
+    todo_list = TodoList.new()
+
+    pid = spawn(fn -> loop(todo_list) end)
+    Process.register(pid, :todo_server)
+
+    pid
+  end
+
+  defp loop(todo_list) do
+    todo_list =
+      receive do
+        message ->
+          process_message(todo_list, message)
+      end
+
+    loop(todo_list)
+  end
+
+  defp process_message(todo_list, {:add_entry, entry}) do
+    TodoList.add_entry(todo_list, entry)
+  end
+
+  defp process_message(todo_list, {:entries, date, caller}) do
+    entries = TodoList.entries(todo_list, date)
+    send(caller, {:entries, entries})
+
+    todo_list
+  end
+
+  def add_entry(entry) do
+    send(:todo_server, {:add_entry, entry})
+  end
+
+  def entries(date) do
+    send(:todo_server, {:entries, date, self()})
+
+    receive do
+      {:entries, entries} ->
+        entries
+    after
+      5000 ->
+        {:error, :timeout}
+    end
+  end
+end
+
 defmodule TodoList do
   # entries %{id: entry = %{date, title}}
   defstruct auto_id: 1, entries: %{}
